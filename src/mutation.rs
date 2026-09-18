@@ -158,6 +158,10 @@ impl<Q: MutationCapability> MutationsStorage<Q> {
         }
     }
 
+    fn get_storage() -> Self {
+        try_consume_context().unwrap_or(provide_root_context(Self::new_in_root()))
+    }
+
     fn insert_or_get_mutation(&mut self, mutation: Mutation<Q>) -> MutationData<Q> {
         let mut storage = self.storage.write();
 
@@ -316,15 +320,10 @@ impl<Q: MutationCapability> UseMutation<Q> {
     ///
     /// For a `sync` version use [UseMutation::mutate].
     pub async fn mutate_async(&self, keys: Q::Keys) -> MutationReader<Q> {
-        let storage = consume_context::<MutationsStorage<Q>>();
+        let mut storage = MutationsStorage::<Q>::get_storage();
 
         let mutation = self.mutation.peek().clone();
-        let mutation_data = storage
-            .storage
-            .peek_unchecked()
-            .get(&mutation)
-            .cloned()
-            .unwrap();
+        let mutation_data = storage.insert_or_get_mutation(mutation.clone());
 
         // Run the mutation
         MutationsStorage::run(&mutation, &mutation_data, keys).await;
@@ -338,15 +337,10 @@ impl<Q: MutationCapability> UseMutation<Q> {
     ///
     /// For an `async` version use [UseMutation::mutate_async].
     pub fn mutate(&self, keys: Q::Keys) {
-        let storage = consume_context::<MutationsStorage<Q>>();
+        let mut storage = MutationsStorage::<Q>::get_storage();
 
         let mutation = self.mutation.peek().clone();
-        let mutation_data = storage
-            .storage
-            .peek_unchecked()
-            .get(&mutation)
-            .cloned()
-            .unwrap();
+        let mutation_data = storage.insert_or_get_mutation(mutation.clone());
 
         // Run the mutation
         spawn(async move {

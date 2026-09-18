@@ -186,6 +186,10 @@ impl<Q: QueryCapability> QueriesStorage<Q> {
         }
     }
 
+    fn get_storage() -> Self {
+        try_consume_context::<Self>().unwrap_or(provide_root_context(Self::new_in_root()))
+    }
+
     fn insert_or_get_query(&mut self, query: Query<Q>) -> QueryData<Q> {
         let query_clone = query.clone();
         let mut storage = self.storage.write();
@@ -266,10 +270,7 @@ impl<Q: QueryCapability> QueriesStorage<Q> {
     pub async fn get(get_query: GetQuery<Q>) -> QueryReader<Q> {
         let query: Query<Q> = get_query.into();
 
-        let mut storage = match try_consume_context::<QueriesStorage<Q>>() {
-            Some(storage) => storage,
-            None => provide_root_context(QueriesStorage::<Q>::new_in_root()),
-        };
+        let mut storage = QueriesStorage::<Q>::get_storage();
 
         let query_data = storage
             .storage
@@ -330,7 +331,7 @@ impl<Q: QueryCapability> QueriesStorage<Q> {
     }
 
     pub async fn invalidate_all() {
-        let storage = consume_context::<QueriesStorage<Q>>();
+        let storage = QueriesStorage::<Q>::get_storage();
 
         // Get all the queries
         let matching_queries = storage
@@ -349,7 +350,7 @@ impl<Q: QueryCapability> QueriesStorage<Q> {
     }
 
     pub async fn invalidate_matching(matching_keys: Q::Keys) {
-        let storage = consume_context::<QueriesStorage<Q>>();
+        let storage = QueriesStorage::<Q>::get_storage();
 
         // Get those queries that match
         let mut matching_queries = Vec::new();
@@ -665,7 +666,7 @@ impl<Q: QueryCapability> UseQuery<Q> {
     ///
     /// For an `async` version use [UseQuery::invalidate_async].
     pub fn invalidate(&self) {
-        let storage = consume_context::<QueriesStorage<Q>>();
+        let storage = QueriesStorage::<Q>::get_storage();
 
         let query = self.query.peek().clone();
         let query_data = storage
@@ -708,10 +709,7 @@ impl<Q: QueryCapability> UseQuery<Q> {
 ///
 /// See [Query::interval_time].
 pub fn use_query<Q: QueryCapability>(query: Query<Q>) -> UseQuery<Q> {
-    let mut storage = match try_consume_context::<QueriesStorage<Q>>() {
-        Some(storage) => storage,
-        None => provide_root_context(QueriesStorage::<Q>::new_in_root()),
-    };
+    let mut storage = QueriesStorage::<Q>::get_storage();
 
     let mut make_query = |query: &Query<Q>, mut prev_query: Option<Query<Q>>| {
         let query_data = storage.insert_or_get_query(query.clone());
